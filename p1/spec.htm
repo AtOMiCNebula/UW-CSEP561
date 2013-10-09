@@ -1,0 +1,264 @@
+
+<HTML>
+<head>
+<title>CSEP 561 Project #1</title>
+</head>
+
+<body>
+
+<font face=Arial size=2>
+  <H3>CSEP 561 Problem Set #1</H3>
+
+  <b>out:</b> Tuesday October 8th, 2013<br>
+  <b>due:</b> Monday October 28th, 2013 by <b>5:00pm</b>.
+  <p>
+
+  [
+  <a href="#summary">summary</a> |
+  <a href="#parta">background</a> |
+  <a href="#partb">tutorials</a> |
+  <a href="#partb">assignment</a> |
+<!--  <a href="#turnin">how to submit</a> | -->
+  <p>
+  
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="summary">Summary.</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+
+Software-Defined Networking (SDN) refactors the network control plane
+to enable programmatic control of packet forwarding and increase
+network flexibility. Instead of having a switch-resident control plane
+define a forwarding (or routing) information base (e.g., using RIP,
+OSPF, etc.), the forwarding information base used by each switch's
+data plane is established by applications running atop a logically
+centralized SDN controller. These applications operate on a (abstract)
+view of the network topology to define the forwarding behavior of each
+(virtual) network switch. The controller translates these directives
+into forwarding rules which are installed in a flow table at each
+physical switch. The data plane in each switch matches packets against
+the rules in the flow table (based on fields in the Ethernet, IP, and
+transport headers) and the actions (forward, flood, drop, etc.)
+defined in the matching rule are applied to the packets. <p>
+
+These SDN projects will expose you to how to write SDN applications to
+achieved some desired control over the forwarding behavior of a
+network. You will be introduced to OpenFlow (the current
+industry-wide standard for SDN), common SDN controllers (POX and
+Floodlight), tools for testing and debugging applications, and the
+typical software and hardware components included in an actual SDN
+deployment. Using this knowledge, you will be able to develop several
+SDN applications that implement basic control over network forwarding
+and leverage the key capabilities exposed by SDN
+controllers.  <p>
+
+ <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="parta"> Background material </a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+The two key technologies that we will use in the projects are: (a)
+OpenFlow: a standardized API that exposes routing/switching functions
+to a controller, and (b) centralized network controller written using
+Floodlight or POX that allows you to install appropriate rules in the
+switches using the OpenFlow API.  We will discuss some of this
+material in class, but there is a wealth of information available on
+the Web that you can read up on in order to get the context for this
+work.  Here are some such links:
+
+<ul>
+<li> <a href="http://www.youtube.com/watch?v=c9-K5O_qYgA">Youtube
+talk</a> by Nick McKeown on how SDN will shape networking.
+
+<li> OpenFlow <a
+href="http://archive.openflow.org/documents/openflow-wp-latest.pdf">white paper</a>.
+
+<li> Read sections 1-4 of OpenFlow <a
+href="http://archive.openflow.org/documents/openflow-spec-v1.0.0.pdf">spec</a>.
+
+<li> <a
+href="http://www.cs.princeton.edu/courses/archive/fall13/cos597E/papers/nox.pdf">NOX paper</a>.
+
+</ul>
+
+
+
+
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="partb">Tutorials</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+
+You will be using the Mininet VM based system developed by the
+OpenFlow group to do your assignments.  For the controller, we
+recommend either Floodlight or POX.  Here are some tutorials to
+install Mininet and start using it with Floodlight/POX.
+
+<ul>
+<li> Parts 1-4 of <a
+href="http://archive.openflow.org/wk/index.php/OpenFlow_Tutorial">OpenFlow
+tutorial</a> provides instructions on how to install Mininet.  There
+is also a <a
+href="http://www.youtube.com/watch?v=yNmv7GiHIKE">video</a> describing
+how to perform the mininet install.  Mininet is also described in the
+following <a
+href="http://klamath.stanford.edu/~nickm/papers/a19-lantz.pdf">paper</a>.
+
+<li> The "Set up network access" instructions are to be modified as
+follows.  Before you open the downloaded VM from VirtualBox, open
+VirtualBox's "Preferences..." from the menu, navigate to the "Network"
+tab, and click on the "Add host-only network" button on the right.
+This will most likely create a "vboxnet0" interface.  After you have
+downloaded the VM, you need to setup the host-only network interface
+before you open the VM.  For this, you click on the "Settings" for the
+VM, navigate to the "Network" tab, click on Adapter 2, "enable" it and
+attach it to the "Host-only adapter" that you had created earlier.
+Then you can follow the instructions listed under "Set up network
+access".  In particular, run the "sudo dhclient eth1" command and possibly also
+a command such as "sudo ifconfig eth1 192.168.56.110".  After this,
+you will be able to login using ssh, e.g., "ssh
+mininet@192.168.56.110".
+
+<li> Run the following command in your VM to fix the following <a href="https://github.com/mininet/mininet/issues/89">bug</a>.
+<pre>sudo sed -e '450s/IP/MAC/' -i /usr/local/lib/python2.7/dist-packages/mininet-2.0.0-py2.7.egg/mininet/node.py</pre>
+
+<li> Part 5 has information on different types of controllers,
+including POX and Floodlight.
+
+<li> Floodlight users: read the <a
+href="http://www.openflowhub.org/display/floodlightcontroller/How+to+Write+a+Module">How
+to write a module</a> document.  Also read up on <a
+href="http://floodlight.openflowhub.org/developing-floodlight/">doc</a>
+on how to write a Floodlight application.
+
+<li> POX users: read the following <a
+href="https://openflow.stanford.edu/display/ONL/POX+Wiki#POXWiki-POXAPIs">documentation</a>.
+
+</ul>
+
+
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="partb">Assignment</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+As part of the assignment, you will build a learning switch. You might
+find it useful to look at the <a href="http://goo.gl/snb9x">Hub code for Floodlight</a>.
+We also provide you a floodlight <em><a href="LearningSwitch.java">skeleton</a></em> and a pox <em><a
+href="LearningSwitch.txt">skeleton</a></em> on top of which to implement your Learning Switch applications. 
+
+<h3>Application Design</h3>
+We will develop a simple learning switch application which will handle the unicast traffic. The controller application will examine the packets and will learn the "source mac address" and "input port". If the destination of the packet is already associated with some port, a flow entry will be installed in the switch and the packet will be sent to the given output port, otherwise the packet will be flooded on all the ports.
+<br>
+<h3>Write Learning Switch Application</h3>
+The learning switch learns the source mac address and the port of hosts from the packets it receive. Following is a naive algorithm for simple learning switch application:
+<pre>
+if (source mac address is new)
+    record the source mac and input port mapping
+if (destination mac address is known)
+    install a flow table rule
+    forward the packet to the destination
+else
+    FLOOD the packet
+</pre>
+
+<h3>Test Learning Switch Application</h3>
+We assume that all of you have mininet and your favorite controller (you can have any controller as long as it's Floodlight or POX) on your machines.
+Launch Mininet with following command:
+<pre>sudo mn --topo single,10 --mac --arp --switch ovsk --controller remote,ip=&lt;host_ip&gt; </pre>
+To test the performance of your switch applications, run a ping test and measure the average rtt latency. 
+<pre>mininet> h1 ping -c 10 h10</pre>
+Next, run a throughput performance test as following:
+<pre>
+mininet> h10 iperf -s &
+mininet> h1 iperf -c h10
+</pre>
+You should compare the performance of the hub and learning switch implementations in terms of rtt latency and
+throughput. What do you observe ? Why do you see such discrepancy among them ? 
+
+Remember that you can use 'dpctl' command with 'dump-flows' option to see whether packets are hitting the rules, when is
+the case.
+<pre>dpctl dump-flows tcp:127.0.0.1:6634 </pre>
+
+<h3>Useful notes</h3>
+
+<ul>
+
+<li> We will cover the learning switch material and some of the SDN
+background material in class on Oct 15th.
+
+<li> You can assume that ARP is turned off.  For extra credit, discuss
+and implement ARP handling at the centralized controller.
+
+<li> Watch this space for additional clarifications.
+
+</ul>
+
+<!--
+<table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="turnin">Turn in instructions</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+ 
+
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="grade">Grading</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+  We will be basing your grade on several elements:
+  <ul>
+    <li> Whether your code works!  It should be correct, compile
+    without warnings, and not leak memory, processes, descriptors, etc.
+    <p>
+
+    <li> How well structured your code is:  you should have clean
+    module interfaces, a nice decomposition, good comments, and so on.
+    <p>
+
+  </ul>
+-->
+  
+</font>
+
+<!--end HTML content-->
+</body>
+</html>
