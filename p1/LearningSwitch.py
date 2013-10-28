@@ -1,8 +1,7 @@
 """
-Author Junaid Khalid
-
-This is an L2 learning switch written directly against the OpenFlow library.
-It is derived from POX l2_learning.py only for IPv4.
+CSE P 561 Network Systems - Project 1 (Learning Switch)
+October 28th, 2013
+Jeff Weiner <jdweiner@cs.washington.edu>
 """
 
 from pox.core import core
