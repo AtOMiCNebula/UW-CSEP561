@@ -1,0 +1,200 @@
+
+<HTML>
+<head>
+<title>CSEP 561 Project #2</title>
+</head>
+
+<body>
+
+<font face=Arial size=2>
+  <H3>CSE561 Problem Set #2</H3>
+
+  <b>out:</b> Tuesday October 29th, 2013<br>
+  <b>due:</b> Monday November 18th, 2013 by <b>5:00pm</b>.
+  <p>
+
+  [
+  <a href="#summary">summary</a> |
+  <a href="#parta">topologies</a> |
+  <a href="#partb">assignment</a> |
+  <a href="#partc">turn-in</a> |
+<!--  <a href="#turnin">how to submit</a> | -->
+  <p>
+  
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="summary">Summary</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+Congratulations on having worked through all of the details of getting
+mininet to work, figuring out a controller codebase and its API, and
+getting a taste of SDN networks!  In this assignment, you will move
+beyond the basics to examine various algorithms that you can
+implement in this context.  Specifically, you will build a
+load-balancing application inside an SDN controller. <p>
+
+ <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="parta"> Topologies </a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+<p>You will need more than a single switch to test your application.
+Mininet provides two built-in topologies that you might be moderately
+useful for this purpose:
+<ul>
+<li><b>tree:</b> Creates a binary tree of a specified depth, where each leaf 
+switch has two hosts connected to it.  For example, to launch mininet with a 
+binary tree of depth 3, run:
+<pre>sudo mn --topo tree,3 --mac --arp --switch ovsk --controller remote</pre>
+<p><img src="tree3.png" /></p></li>
+<li>linear: Creates a linear topology where all switches connect in a line and
+each switch has a single host connected to it.  For example, to create 4
+switches in a line, run:
+<pre>sudo mn --topo linear,4 --mac --arp --switch ovsk --controller remote</pre></li>
+</ul>
+</p>
+
+<p>You can also create your own custom topologies in mininet.  We have
+provided two custom topologies.  You can install these topologies by running
+the following commands in your VM:
+<pre>cd ~/mininet/custom/
+wget http://courses.cs.washington.edu/courses/csep561/13au/projects/topos.tgz
+tar xzvf topos.tgz</pre>
+<ul>
+<li>fattree: Creates a FatTree-like topology of depth 3, where each leaf
+switch has two hosts connected to it. To use this topology, run:
+<pre>sudo mn --custom ~/mininet/custom/fattree.py --topo fattree --mac --arp --switch ovsk --controller remote</pre>
+Each switch has 4 ports by default. If you want to customize the port number, e.g. 2n ports, you can type the command:
+<pre>sudo mn --custom ~/mininet/custom/fattree.py --topo fattree,n --mac --arp --switch ovsk --controller remote</pre>
+</li>
+<li>mesh: Creates a full mesh with 4 switches, where each switch has 3 hosts
+connected to it.  To use this topology, run:
+<pre>sudo mn --custom ~/mininet/custom/mesh.py --topo mesh --mac --arp --switch ovsk --controller remote</pre></li>
+</ul>
+
+Feel free to build your own topologies using the template provided above <p>
+
+
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="partb">Assignment</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+Online services are often replicated on multiple servers for greater capacity
+and better reliability. Within a single data center or enterprise, a
+front-end load balancer typically directs each client request
+to a particular replica. A dedicated load balancer using consistent
+hashing is a popular solution today, but it suffers from being an
+expensive additional piece of hardware and has limited
+customizability. Your project is to develop a load-balancing solution
+that uses the OpenFlow API and an SDN controller to perform load
+balancing using generic OpenFlow enabled switches and
+thereby reduce costs. <p>
+
+You should view this as a design and implementation project.  We
+suggest that you break it down into the following tasks:
+
+<ul>
+<li> Develop a design document that outlines the goals of the load
+  balancing application.  At the very minimum, it should balance the
+  load across a number of servers.  That is, when a client request comes in,
+  the flow is routed to one of the servers in a load-balanced way.  You
+  can implement any policy to perform load-balancing -- e.g., you can
+  use a random scheme such that each flow is routed to a random server, or
+  you can use some form of hashing on flow identifiers to pick the target
+  server, and so on.  Substantiate your design choices.
+<li> Implement your load balancer within the context of an SDN
+  controller of your choice.
+<li> Evaluate or justify how reactive is your load balancer to aspects
+  of your environment.
+<li> Perform a short writeup of your project.
+</ul>
+
+Here are some specific issues that you might want to consider in
+designing your controller code:
+
+<ul>
+<li> How do you want unmodified server code to work inside your
+  system?  What are the IP addresses of the various servers and what
+  is the relationship with the IP address on the incoming packet?
+  What OpenFlow features are appropriate in getting the packets to the
+  appropriate server?
+
+<li> How often is the controller invoked?  Is it on a per-flow basis
+  or on a per-packet basis?  Can you do better than invoking it on a
+  per-flow basis?
+
+<li> (Optional) If you want to load-balance the traffic across links,
+  how would you do it?  What OpenFlow features are appropriate for
+  doing so?  What controller logic is required for implementing this
+  load balancing policy?
+
+<li> (Optional) If you want to be able to learn the topology on a
+  periodic basis in order to react to changes in network status, how
+  would you go about doing it?
+
+</ul>
+
+
+<table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="partc">Turn in instructions</a>
+       </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+Please turn in a tarball or a zip file at <a href="https://catalyst.uw.edu/collectit/dropbox/summary/arvindk/29361">https://catalyst.uw.edu/collectit/dropbox/summary/arvindk/29361</a>. <br/>
+The archive should have following files:
+<ul>
+  <li> your source code with comments;
+  <li> a readme file including your name, email address, and the platform you use;
+  <li> transcript of the commands that you executed to test the code and the output from the commands;
+  <li> discussion of what you learnt from the experience.
+</ul>
+ 
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="grade">Grading</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+  We will be basing your grade on several elements:
+  <ul>
+    <li> Whether your code works!  It should be correct, compile
+    without warnings, and not leak memory, processes, descriptors, etc.
+
+    <li> How well structured your code is:  you should have clean
+    module interfaces, a nice decomposition, good comments, and so on.
+
+  </ul>
+</font>
+
+<!--end HTML content-->
+</body>
+</html>

@@ -7,3 +7,4 @@ course.
 Assignments:
 
 1. Learning Switch
+2. Load-Balancing Switch
