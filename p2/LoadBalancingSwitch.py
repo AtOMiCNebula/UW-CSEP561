@@ -62,7 +62,7 @@ class LoadBalancingSwitch (EventMixin):
       # Record which hosts exists on which of our ports
       ip = GetIPFromMAC(packet.src)
       if ip is not None:
-        log.debug("    on IP '%s'" % ip)
+        #log.debug("    on IP '%s'" % ip)
         self.hostports[event.port] = packet.src
 
     elif self.hostlocations[packet.src]["ID"] == self.connection.ID:
