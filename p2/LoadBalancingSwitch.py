@@ -7,11 +7,22 @@ Jeff Weiner <jdweiner@cs.washington.edu>
 from datetime import *
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
+from pox.lib.addresses import EthAddr
+from pox.lib.packet.arp import arp
+from pox.lib.packet.ethernet import ethernet
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
 import time
 
 log = core.getLogger()
+
+LOADBALANCE_TARGET = "10.123."
+
+def GetMACForLoadBalancing():
+  value = GetMACForLoadBalancing.nextvalue
+  GetMACForLoadBalancing.nextvalue += 1
+  return EthAddr("031337%06x" % (value & 0xFFFFFF))
+GetMACForLoadBalancing.nextvalue = 1
 
 HARD_TIMEOUT = 30
 IDLE_TIMEOUT = 30
@@ -54,6 +65,33 @@ class LoadBalancingSwitch (EventMixin):
       msg.in_port = event.port
       self.connection.send(msg)
       return
+
+    # Watch for ARP packets trying to discover a load-balance target.
+    packet_arp = packet.find('arp')
+    if packet_arp is not None and str(packet_arp.protodst).startswith(LOADBALANCE_TARGET):
+      # Found one!  Respond with a special MAC address, which our switches will
+      # be able to identify easily for load-balancing.
+      #log.debug('ARP Packet!!!! Looking for %s' % packet_arp.protodst)
+      mac = GetMACForLoadBalancing()
+
+      reply_arp = arp()
+      reply_arp.hwtype = packet_arp.hwtype
+      reply_arp.prototype = packet_arp.prototype
+      reply_arp.hwlen = packet_arp.hwlen
+      reply_arp.protolen = packet_arp.protolen
+      reply_arp.opcode = arp.REPLY
+      reply_arp.hwdst = packet_arp.hwsrc
+      reply_arp.hwsrc = mac
+      reply_arp.protodst = packet_arp.protosrc
+      reply_arp.protosrc = packet_arp.protodst
+      reply_eth = ethernet(type=packet.type, src=mac, dst=packet_arp.hwsrc)
+      reply_eth.payload = reply_arp
+      reply = of.ofp_packet_out(in_port=of.OFPP_NONE)
+      reply.actions.append(of.ofp_action_output(port=event.port))
+      reply.data = reply_eth.pack()
+      event.connection.send(reply)
+      return
+
     elif packet.dst in self.mactable:
       # If we know the destination, but are being told about it, recreate the
       # flow, since this is either the initial discovery, or the flow expired.
