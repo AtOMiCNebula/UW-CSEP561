@@ -7,16 +7,21 @@ Jeff Weiner <jdweiner@cs.washington.edu>
 from datetime import *
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
+from pox.openflow.libopenflow_01 import *
 from pox.lib.addresses import EthAddr
 from pox.lib.packet.arp import arp
 from pox.lib.packet.ethernet import ethernet
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
+import random
 import time
 
 log = core.getLogger()
 
 LOADBALANCE_TARGET = "10.123."
+
+def IsMACForLoadBalancing(mac):
+  return str(mac).startswith("03:13:37:")
 
 def GetMACForLoadBalancing():
   value = GetMACForLoadBalancing.nextvalue
@@ -90,6 +95,32 @@ class LoadBalancingSwitch (EventMixin):
       reply.actions.append(of.ofp_action_output(port=event.port))
       reply.data = reply_eth.pack()
       event.connection.send(reply)
+      return
+
+    # If this packet is being delivered to a special MAC, set up some flows to
+    # get the data to the right place.
+    if IsMACForLoadBalancing(packet.dst):
+      eligibleports = []
+      for port in self.connection.features.ports:
+        if port.port_no != event.port and not port.config & OFPPC_PORT_DOWN:
+          eligibleports.append(port.port_no)
+      port_out = random.choice(eligibleports)
+      log.debug("Eligible ports: %s, chose port %s" % (eligibleports, port_out))
+
+      # Establish bi-directional flows!
+      flow_in = of.ofp_flow_mod()
+      flow_out = of.ofp_flow_mod()
+      flow_in.idle_timeout = flow_out.idle_timeout = IDLE_TIMEOUT
+      flow_in.hard_timeout = flow_out.hard_timeout = HARD_TIMEOUT
+      flow_in.actions.append(of.ofp_action_output(port=event.port))
+      flow_out.actions.append(of.ofp_action_output(port=port_out))
+      flow_in.match = of.ofp_match(dl_dst=packet.src, dl_src=packet.dst)
+      flow_out.match = of.ofp_match(dl_dst=packet.dst, dl_src=packet.src)
+      flow_in.in_port = port_out
+      flow_out.in_port = event.port
+      flow_out.data = event.ofp
+      self.connection.send(flow_in)
+      self.connection.send(flow_out)
       return
 
     elif packet.dst in self.mactable:
