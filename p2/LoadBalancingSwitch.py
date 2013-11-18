@@ -29,6 +29,13 @@ def GetMACForLoadBalancing():
   return EthAddr("031337%06x" % (value & 0xFFFFFF))
 GetMACForLoadBalancing.nextvalue = 1
 
+def GetIPFromMAC(mac):
+  mactuple = mac.toTuple()
+  if mactuple[0:5] == (0,0,0,0,0):
+    return "10.0.0.%d" % mactuple[5]
+  else:
+    return None
+
 HARD_TIMEOUT = 30
 IDLE_TIMEOUT = 30
 class LoadBalancingSwitch (EventMixin):
@@ -39,6 +46,7 @@ class LoadBalancingSwitch (EventMixin):
     self.listenTo(connection)
     self.hostlocations = hostlocations
     self.mactable = {}
+    self.hostports = {}
 
   def _handle_PacketIn (self, event):
 
@@ -50,6 +58,13 @@ class LoadBalancingSwitch (EventMixin):
     if packet.src not in self.hostlocations or self.hostlocations[packet.src]["lastseen"] < (datetime.now()-timedelta(0,IDLE_TIMEOUT)):
       #log.debug("s%s takes ownership of host %s" % (self.connection.ID, packet.src))
       self.hostlocations[packet.src] = { "ID": self.connection.ID, "lastseen": datetime.now() }
+
+      # Record which hosts exists on which of our ports
+      ip = GetIPFromMAC(packet.src)
+      if ip is not None:
+        log.debug("    on IP '%s'" % ip)
+        self.hostports[event.port] = packet.src
+
     elif self.hostlocations[packet.src]["ID"] == self.connection.ID:
       #log.debug("s%s continues to own host %s" % (datetime.now(), self.connection.ID, packet.src))
       self.hostlocations[packet.src]["lastseen"] = datetime.now()
@@ -99,23 +114,40 @@ class LoadBalancingSwitch (EventMixin):
 
     # If this packet is being delivered to a special MAC, set up some flows to
     # get the data to the right place.
-    if IsMACForLoadBalancing(packet.dst):
+    packet_ipv4 = packet.find('ipv4')
+    if IsMACForLoadBalancing(packet.dst) and packet_ipv4 is not None:
       eligibleports = []
       for port in self.connection.features.ports:
         if port.port_no != event.port and not port.config & OFPPC_PORT_DOWN:
           eligibleports.append(port.port_no)
       port_out = random.choice(eligibleports)
-      log.debug("Eligible ports: %s, chose port %s" % (eligibleports, port_out))
 
       # Establish bi-directional flows!
+      log.debug("Establishing load-balancing flows for %s <--> %s" % (packet.src, packet.dst))
       flow_in = of.ofp_flow_mod()
       flow_out = of.ofp_flow_mod()
       flow_in.idle_timeout = flow_out.idle_timeout = IDLE_TIMEOUT
       flow_in.hard_timeout = flow_out.hard_timeout = HARD_TIMEOUT
-      flow_in.actions.append(of.ofp_action_output(port=event.port))
-      flow_out.actions.append(of.ofp_action_output(port=port_out))
       flow_in.match = of.ofp_match(dl_dst=packet.src, dl_src=packet.dst)
       flow_out.match = of.ofp_match(dl_dst=packet.dst, dl_src=packet.src)
+
+      if port_out in self.hostports:
+        # If we're delivering to a host (instead of another switch), we need
+        # to rewrite some of the packet data, so that things line up properly
+        # on each end.  The sender sends to the special IP, and the receiver
+        # should see the packet addressed to itself (and vice versa).
+        log.debug("...which will be handled by %s" % (self.hostports[port_out]))
+        flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, packet.dst))
+        flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, packet_ipv4.dstip))
+        flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, self.hostports[port_out]))
+        flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, GetIPFromMAC(self.hostports[port_out])))
+
+        # We also need to update one of our match rules, since the packet will
+        # be sent with a non-special MAC address.
+        flow_in.match.dl_src = self.hostports[port_out]
+
+      flow_in.actions.append(of.ofp_action_output(port=event.port))
+      flow_out.actions.append(of.ofp_action_output(port=port_out))
       flow_in.in_port = port_out
       flow_out.in_port = event.port
       flow_out.data = event.ofp
