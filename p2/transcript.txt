@@ -1,0 +1,38 @@
+CSE P 561 Network Systems - Project 2 (Load-Balancing Switch)
+November 18th, 2013
+Jeff Weiner <jdweiner@cs.washington.edu>
+
+Commands run, and their output:
+
+
+To launch the controller:
+    ~/pox$  ./pox.py log.level --DEBUG LoadBalancingSwitch
+
+
+To launch mininet:
+    ~/$  sudo mn --custom ~/mininet/custom/treetop.py --topo treetop,3 --mac --arp --switch ovsk --controller remote
+
+
+Commands run in mininet (with slightly trimmed output):
+    mininet> h0 ping -c2 10.123.0.1
+        PING 10.123.0.1 (10.123.0.1) 56(84) bytes of data.
+        64 bytes from 10.123.0.1: icmp_req=1 ttl=64 time=51.9 ms
+        64 bytes from 10.123.0.1: icmp_req=2 ttl=64 time=0.465 ms
+
+        --- 10.123.0.1 ping statistics ---
+        2 packets transmitted, 2 received, 0% packet loss, time 1003ms
+        rtt min/avg/max/mdev = 0.465/26.207/51.949/25.742 ms
+
+    mininet> h0 tcpdump     (run in xterm, to avoid blocking mininet shell)
+        ARP, Request who-has 10.123.0.1 tell 10.0.0.1, length 28
+        ARP, Reply 10.123.0.1 is-at 03:13:37:00:00:01 (oui Unknown), length 28
+        IP 10.0.0.1 > 10.123.0.1: ICMP echo request, id 15662, seq 1, length 64
+        IP 10.123.0.1 > 10.0.0.1: ICMP echo reply, id 15662, seq 1, length 64
+        IP 10.0.0.1 > 10.123.0.1: ICMP echo request, id 15662, seq 2, length 64
+        IP 10.123.0.1 > 10.0.0.1: ICMP echo reply, id 15662, seq 2, length 64
+
+    mininet> h8 tcpdump     (run in xterm, to avoid blocking mininet shell)
+        IP 10.0.0.1 > 10.0.0.9: ICMP echo request, id 15662, seq 1, length 64
+        IP 10.0.0.9 > 10.0.0.1: ICMP echo reply, id 15662, seq 1, length 64
+        IP 10.0.0.1 > 10.0.0.9: ICMP echo request, id 15662, seq 2, length 64
+        IP 10.0.0.9 > 10.0.0.1: ICMP echo reply, id 15662, seq 2, length 64
