@@ -90,7 +90,7 @@ def start_mininet():
 		info( '*** Successfully loaded ip settings for hosts\n %s\n' % IP_SETTING)
 
 	topo = NatTopo()
-	controller = customConstructor(CONTROLLERS, 'remote,ip=192.168.56.1')
+	controller = customConstructor(CONTROLLERS, 'remote')
 	mn = Mininet(topo = topo, controller=controller)
 	mn.start()
 
