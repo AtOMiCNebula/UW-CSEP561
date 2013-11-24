@@ -22,8 +22,30 @@ class NAT (EventMixin):
     self.connection = connection
     self.listenTo(connection)
 
+    # Find which port our bridge is on
+    ethMax = None
+    for p in self.connection.features.ports:
+      if ethMax is None or ethMax['name'] < p.name:
+        ethMax = { 'name': p.name, 'hw_addr': p.hw_addr }
+    self.if_internal = ethMax['hw_addr']
+    log.debug("NAT registered bridge interface %s on port %s" % (ethMax['hw_addr'], ethMax['name']))
+
+  def IsInternalInterface(self, mac):
+    return mac == self.if_internal
+
+  def IsExternalInterface(self, mac):
+    for p in self.connection.features.ports:
+      if p.hw_addr == mac:
+        return not self.IsInternalInterface(mac)
+    return False
+
   def _handle_PacketIn (self, event):
-    log.debug("NAT dropping packet")
+    packet = event.parse()
+
+    if self.IsInternalInterface(packet.dst):
+      log.debug("NAT dropping packet on internal interface")
+    elif self.IsExternalInterface(packet.dst):
+      log.debug("NAT dropping packet on external interface")
 
 
 class LearningSwitch (EventMixin):
