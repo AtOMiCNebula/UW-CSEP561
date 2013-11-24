@@ -1,6 +1,6 @@
 """
-CSE P 561 Network Systems - Project 1 (Learning Switch)
-October 28th, 2013
+CSE P 561 Network Systems - Project 3 (Network Address Translation)
+December 10th, 2013
 Jeff Weiner <jdweiner@cs.washington.edu>
 """
 
@@ -14,6 +14,18 @@ log = core.getLogger()
 
 HARD_TIMEOUT = 30
 IDLE_TIMEOUT = 30
+
+
+class NAT (EventMixin):
+  def __init__ (self,connection):
+    # Switch we'll be adding NAT capabilities to
+    self.connection = connection
+    self.listenTo(connection)
+
+  def _handle_PacketIn (self, event):
+    log.debug("NAT dropping packet")
+
+
 class LearningSwitch (EventMixin):
 
   def __init__ (self,connection):
@@ -67,17 +79,27 @@ class LearningSwitch (EventMixin):
     msg.in_port = event.port
     self.connection.send(msg)
 
-class learning_switch (EventMixin):
+
+class controller_picker (EventMixin):
 
   def __init__(self):
     self.listenTo(core.openflow)
 
   def _handle_ConnectionUp (self, event):
-    log.debug("Connection %s" % (event.connection,))
-    LearningSwitch(event.connection)
+    # Determine what switch just came up
+    for p in event.connection.features.ports:
+      if p.port_no == 65534:
+        sw = p.name
+    if sw == "sw0":
+      constructor = NAT
+    else:
+      constructor = LearningSwitch
+
+    # Create it!
+    log.debug("%s(%s)" % (constructor.__name__, sw))
+    constructor(event.connection)
 
 
 def launch ():
-  #Starts an L2 learning switch.
-  core.registerNew(learning_switch)
+  core.registerNew(controller_picker)
 
