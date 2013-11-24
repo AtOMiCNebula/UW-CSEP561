@@ -10,14 +10,14 @@ from pox.lib.revent import *
 from pox.lib.util import dpidToStr
 import time
 
-log = core.getLogger()
-
 HARD_TIMEOUT = 30
 IDLE_TIMEOUT = 30
 
 
 class NAT (EventMixin):
-  def __init__ (self,connection):
+  def __init__ (self,connection,name):
+    self.log = core.getLogger("NAT(%s)" % name)
+
     # Switch we'll be adding NAT capabilities to
     self.connection = connection
     self.listenTo(connection)
@@ -28,7 +28,7 @@ class NAT (EventMixin):
       if ethMax is None or ethMax['name'] < p.name:
         ethMax = { 'name': p.name, 'hw_addr': p.hw_addr }
     self.if_internal = ethMax['hw_addr']
-    log.debug("NAT registered bridge interface %s on port %s" % (ethMax['hw_addr'], ethMax['name']))
+    self.log.debug("Registered internal interface %s on port %s" % (ethMax['hw_addr'], ethMax['name']))
 
   def IsInternalInterface(self, mac):
     return mac == self.if_internal
@@ -43,14 +43,16 @@ class NAT (EventMixin):
     packet = event.parse()
 
     if self.IsInternalInterface(packet.dst):
-      log.debug("NAT dropping packet on internal interface")
+      self.log.debug("Dropping packet on internal interface")
     elif self.IsExternalInterface(packet.dst):
-      log.debug("NAT dropping packet on external interface")
+      self.log.debug("Dropping packet on external interface")
 
 
 class LearningSwitch (EventMixin):
 
-  def __init__ (self,connection):
+  def __init__ (self,connection,name):
+    self.log = core.getLogger("LearningSwitch(%s)" % name)
+
     # Switch we'll be adding L2 learning switch capabilities to
     self.connection= connection
     self.listenTo(connection)
@@ -64,7 +66,7 @@ class LearningSwitch (EventMixin):
     # updating out mac to port mapping
     if packet.src not in self.mactable or self.mactable[packet.src] != event.ofp.in_port:
         self.mactable[packet.src] = event.ofp.in_port
-        log.debug("Learned port %s connects to %s" % (event.ofp.in_port, packet.src))
+        self.log.debug("Port %s connects to %s" % (event.ofp.in_port, packet.src))
     
     if packet.type == packet.LLDP_TYPE or packet.type == 0x86DD:
       # Drop LLDP packets 
@@ -79,7 +81,7 @@ class LearningSwitch (EventMixin):
     elif packet.dst in self.mactable:
       # If we know the destination, but are being told about it, recreate the
       # flow, since this is either the initial discovery, or the flow expired.
-      log.debug("Establishing flow to deliver packets for %s to port %s" % (packet.dst, self.mactable[packet.dst]))
+      self.log.debug("Creating flow for %s to port %s" % (packet.dst, self.mactable[packet.dst]))
       fm = of.ofp_flow_mod()
       fm.idle_timeout = IDLE_TIMEOUT
       fm.hard_timeout = HARD_TIMEOUT
@@ -94,7 +96,7 @@ class LearningSwitch (EventMixin):
       self.connection.send(fm)
       return
 
-    log.debug("Port for %s unknown -- flooding" % (packet.dst,))
+    self.log.debug("Flooding for unknown address %s" % (packet.dst,))
     msg = of.ofp_packet_out()
     msg.actions.append(of.ofp_action_output(port = of.OFPP_FLOOD))
     msg.buffer_id = event.ofp.buffer_id
@@ -105,6 +107,7 @@ class LearningSwitch (EventMixin):
 class controller_picker (EventMixin):
 
   def __init__(self):
+    self.log = core.getLogger("Picker")
     self.listenTo(core.openflow)
 
   def _handle_ConnectionUp (self, event):
@@ -118,8 +121,8 @@ class controller_picker (EventMixin):
       constructor = LearningSwitch
 
     # Create it!
-    log.debug("%s(%s)" % (constructor.__name__, sw))
-    constructor(event.connection)
+    self.log.debug("Creating %s(%s)" % (constructor.__name__, sw))
+    constructor(event.connection, sw)
 
 
 def launch ():
