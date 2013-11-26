@@ -83,6 +83,8 @@ Feel free to look inside the script and customize it in whatever way suits your 
   <li>Each server runs a simple HTTP server.</li>
   <li>NAT internal and external IP addresses are 10.0.1.1 and 172.64.3.1 respectively. The IP configuration refers to file IP_CONFIG in the tarball.</li>
   <li>The switch in the figure only needs to act as a learning switch. You can directly use your code from Project 1.</li>
+  <li>The default controller is remote controller with IP address 192.168.56.1. You can change the IP address in the Line 93 of run_mininet.py.
+  <li>Server1 and server2 servers in folder <em>http_server1</em> and <em>http_server2</em> respectively. You can put any files in those folders for clients to download. Clients also operates in different folders.
 </ul>
 
 <p>These are the major parts of the assignment:</p>
@@ -97,7 +99,7 @@ Note that your NAT is not required to handle UDP. It is entirely up to you wheth
 from the emulated client host:</p>
 
 <ul>
-  <li>Clients should be able to download files under directory <em>http_server1, http_server2</em> using HTTP from the app servers.</li>
+  <li>Clients should be able to download files under directory <em>http_server1 or http_server2</em> using HTTP from the app servers. Client specifies the server to download files.</li>
   <li>All packets to external hosts (app servers) should appear to come from eth2's address (e.g., 172.64.3.1 above).</li>
 </ul>
 
