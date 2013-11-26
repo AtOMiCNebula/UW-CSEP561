@@ -27,17 +27,17 @@ class NAT (EventMixin):
     for p in self.connection.features.ports:
       if ethMax is None or ethMax['name'] < p.name:
         ethMax = { 'name': p.name, 'hw_addr': p.hw_addr }
-    self.if_internal = ethMax['hw_addr']
-    self.log.debug("Registered internal interface %s on port %s" % (ethMax['hw_addr'], ethMax['name']))
+    self.if_external = ethMax['hw_addr']
+    self.log.debug("Registered external interface %s on port %s" % (ethMax['hw_addr'], ethMax['name']))
 
   def IsInternalInterface(self, mac):
-    return mac == self.if_internal
-
-  def IsExternalInterface(self, mac):
     for p in self.connection.features.ports:
       if p.hw_addr == mac:
-        return not self.IsInternalInterface(mac)
+        return not self.IsExternalInterface(mac)
     return False
+
+  def IsExternalInterface(self, mac):
+    return mac == self.if_external
 
   def _handle_PacketIn (self, event):
     packet = event.parse()
