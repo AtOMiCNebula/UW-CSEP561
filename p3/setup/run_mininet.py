@@ -7,17 +7,33 @@ Start up a topology
 import os.path
 import sys
 
-from mininet.net import Mininet
-from mininet.node import Controller, RemoteController
-from mininet.log import setLogLevel, info
 from mininet.cli import CLI
+from mininet.link import Link, TCLink
+from mininet.log import setLogLevel, info
+from mininet.net import Mininet
+from mininet.node import Controller, RemoteController, OVSKernelSwitch, Host
 from mininet.topo import Topo
 from mininet.util import quietRun, customConstructor
 
+static_arp = False
+auto_mac = False
+controller_ip = "127.0.0.1"
+
 IPCONFIG_FILE = './IP_CONFIG'
 IP_SETTING={}
+
+SWITCHDEF = 'ovsk'
+SWITCHES = { 'ovsk': OVSKernelSwitch }
+
+HOSTDEF = 'proc'
+HOSTS = { 'proc': Host }
+
+LINKDEF = 'default'
+LINKS = { 'default': Link,
+          'tc': TCLink }
+
 CONTROLLERS = {'remote': RemoteController}
-static_arp = False
+
 
 class NatTopo (Topo):
 	"NAT Topology"
@@ -90,16 +106,28 @@ def start_mininet():
 		info( '*** Successfully loaded ip settings for hosts\n %s\n' % IP_SETTING)
 
 	topo = NatTopo()
-	controller = customConstructor(CONTROLLERS, 'remote')
-	mn = Mininet(topo = topo, controller=controller)
+	link = customConstructor( LINKS, LINKDEF )
+	switch = customConstructor( SWITCHES, SWITCHDEF )
+	host = customConstructor( HOSTS, HOSTDEF )
+	controller = customConstructor( CONTROLLERS, 'remote,ip=%s' % controller_ip )
+
+	mn = Mininet( topo=topo, 
+			switch=switch,
+			host=host,
+			controller=controller, 
+			link=link,
+			autoSetMacs=auto_mac,
+			listenPort=6634)
 	mn.start()
 
 	# set hosts ip address
 	server1, server2, client1, client2, client3, nat = mn.get('server1', 'server2', 'client1', 'client2', 'client3', 'sw0')
+	
 	s1intf = server1.defaultIntf()
 	s1intf.setIP('%s/8' % IP_SETTING['server1'])
 	s2intf = server2.defaultIntf()
 	s2intf.setIP('%s/8' % IP_SETTING['server2'])
+
 	c1intf = client1.defaultIntf()
 	c1intf.setIP('%s/8' % IP_SETTING['client1'])
 	c2intf = client2.defaultIntf()
@@ -150,6 +178,11 @@ if __name__ == '__main__':
 	for arg in sys.argv:
 		if (arg == '--arp'):
 			static_arp = True
+		elif (arg == '--mac'):
+			auto_mac = True
+		elif (arg.startswith('--cip')):
+			token = arg.split('=')
+			controller_ip = token[1]
 
 	setLogLevel('info')
 	start_mininet()

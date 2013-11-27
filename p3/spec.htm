@@ -71,20 +71,25 @@ tar xzvf setup.tgz
 </pre>
 To start the mininet, run:
 <pre>
-sudo ./run_mininet.py --arp
+sudo ./run_mininet.py --arp --mac --cip=&lt;Your controller IP addr&gt;
 </pre>
-The --arp option will let the mininet initialize the static ARP entries in each host. For extra credit, you can disable the --arp option and have your NAT handle ARP reply/request..
+Option description:
+<ul>
+<li>--arp: let the mininet initialize the static ARP entries in each host. For extra credit, you can disable the --arp option and have your NAT handle ARP reply/request.</li>
+<li>--mac: set the MAC address of each host to a simple value, such as 00:00:00:00:00:01. (In this case, the MAC address of each host will be a fixed value, and won't vary at each runtime.)</li>
+<li>--cip: set the remote controller IP address. Default is localhost (127.0.0.1).</li>
+</ul>
 </p>
 
 <p>
 Feel free to look inside the script and customize it in whatever way suits your implementation. Some tips/notes about the environment:
 </p>
 <ul>
-  <li>Each server runs a simple HTTP server.</li>
+  <li>Each server runs a simple HTTP server, serving at port 8000.</li>
   <li>NAT internal and external IP addresses are 10.0.1.1 and 172.64.3.1 respectively. The IP configuration refers to file IP_CONFIG in the tarball.</li>
   <li>The switch in the figure only needs to act as a learning switch. You can directly use your code from Project 1.</li>
-  <li>The default controller is remote controller with IP address 192.168.56.1. You can change the IP address in the Line 93 of run_mininet.py.
-  <li>Server1 and server2 servers in folder <em>http_server1</em> and <em>http_server2</em> respectively. You can put any files in those folders for clients to download. Clients also operates in different folders.
+  <li>Server1 and server2 operate in folder <em>http_server1</em> and <em>http_server2</em> respectively. You can put any files in those folders for clients to download. Clients also operate in different folders.
+  <li>If the mininet setting has some problem on your virtual machine, you can try 'sudo mn -c' to clear the previous setting.
 </ul>
 
 <p>These are the major parts of the assignment:</p>
@@ -183,8 +188,11 @@ diagram.</p>
 
 <p>You do not need to keep lots of state per connection. For example, there is no need to track seqnos or window values or ensure TCP packets are in proper order to the end hosts. Keep only the information that is useful to the NAT for establishing or clearing mappings.</p>
 
+<p>Each time the controller receives a new TCP flow, it should install a new rule to the NAT which modifies a few fields in data link, network and transport headers. The OpenFlow switch will automatically update the IP and TCP checksums.
+</p>
+<!--
 <p>When rewriting TCP packets, remember to update the checksum (over the pseudo-header, tcp header, and payload). The TCP checksum is calculated like the IP checksum, so you can reuse the cksum function. Note that if the checksum is incorrect when the packet comes in, you can drop it; you should not "correct the checksum" as that would hide potential attackers or errors.</p>
-
+-->
 <h3>
 <a name="optional" class="anchor" href="#optional"><span class="octicon octicon-link"></span></a>Optional</h3>
 
