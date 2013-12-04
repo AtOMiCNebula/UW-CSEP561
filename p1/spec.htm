@@ -18,14 +18,16 @@
   <a href="#parta">background</a> |
   <a href="#partb">tutorials</a> |
   <a href="#partb">assignment</a> |
-<!--  <a href="#turnin">how to submit</a> | -->
+  <a href="#turnin">turn-in</a> |
+  <a href="#grade">grading</a> |
+  <a href="#sol">solution</a> ]
   <p>
   
   <table cellSpacing="0" cellPadding="4" width="100%" border="0">
     <tr bgColor="#ffd700">
       <td class="part" width="100%">
         <font face=Arial size=3>
-        <a name="summary">Summary.</a>
+        <a name="summary">Summary</a>
         </font>
       </td>
     </tr>
@@ -134,10 +136,11 @@ before you open the VM.  For this, you click on the "Settings" for the
 VM, navigate to the "Network" tab, click on Adapter 2, "enable" it and
 attach it to the "Host-only adapter" that you had created earlier.
 Then you can follow the instructions listed under "Set up network
-access".  In particular, run the "sudo dhclient eth1" command and possibly also
+access".  
+<!-- In particular, run the "sudo dhclient eth1" command and possibly also
 a command such as "sudo ifconfig eth1 192.168.56.110".  After this,
 you will be able to login using ssh, e.g., "ssh
-mininet@192.168.56.110".
+mininet@192.168.56.110". -->
 
 <li> Run the following command in your VM to fix the following <a href="https://github.com/mininet/mininet/issues/89">bug</a>.
 <pre>sudo sed -e '450s/IP/MAC/' -i /usr/local/lib/python2.7/dist-packages/mininet-2.0.0-py2.7.egg/mininet/node.py</pre>
@@ -147,9 +150,11 @@ including POX and Floodlight.
 
 <li> Floodlight users: read the <a
 href="http://www.openflowhub.org/display/floodlightcontroller/How+to+Write+a+Module">How
-to write a module</a> document.  Also read up on <a
+to write a module</a> document. 
+<!-- Also read up on <a
 href="http://floodlight.openflowhub.org/developing-floodlight/">doc</a>
 on how to write a Floodlight application.
+-->
 
 <li> POX users: read the following <a
 href="https://openflow.stanford.edu/display/ONL/POX+Wiki#POXWiki-POXAPIs">documentation</a>.
@@ -175,7 +180,6 @@ href="LearningSwitch.txt">skeleton</a></em> on top of which to implement your Le
 
 <h3>Application Design</h3>
 We will develop a simple learning switch application which will handle the unicast traffic. The controller application will examine the packets and will learn the "source mac address" and "input port". If the destination of the packet is already associated with some port, a flow entry will be installed in the switch and the packet will be sent to the given output port, otherwise the packet will be flooded on all the ports.
-<br>
 <h3>Write Learning Switch Application</h3>
 The learning switch learns the source mac address and the port of hosts from the packets it receive. Following is a naive algorithm for simple learning switch application:
 <pre>
@@ -218,22 +222,29 @@ and implement ARP handling at the centralized controller.
 
 <li> Watch this space for additional clarifications.
 
+<li> If you are using the floodlight to implement your Learning Switch application, you should use this <em><a href="floodlightdefault.properties">property file</a></em>, replacing the original one at <em>src/main/resources/floodlightdefault.properties</em>. Otherwise, the default property file includes too many modules that overlap with the module you need to implement.
+
 </ul>
 
-<!--
 <table cellSpacing="0" cellPadding="4" width="100%" border="0">
     <tr bgColor="#ffd700">
       <td class="part" width="100%">
         <font face=Arial size=3>
         <a name="turnin">Turn in instructions</a>
-        </font>
+       </font>
       </td>
     </tr>
   </table>
   <p>
 
+Please turn in a tarball or a zip file at <a href="https://catalyst.uw.edu/collectit/dropbox/summary/arvindk/29361">https://catalyst.uw.edu/collectit/dropbox/summary/arvindk/29361</a>. <br/>
+The archive should have following files:
+<ul>
+  <li> your source code with comments;
+  <li> a readme file including your name, email address, and the platform you use;
+  <li> discussion of what you learnt from the experience.
+</ul>
  
-
   <table cellSpacing="0" cellPadding="4" width="100%" border="0">
     <tr bgColor="#ffd700">
       <td class="part" width="100%">
@@ -248,15 +259,25 @@ and implement ARP handling at the centralized controller.
   <ul>
     <li> Whether your code works!  It should be correct, compile
     without warnings, and not leak memory, processes, descriptors, etc.
-    <p>
 
     <li> How well structured your code is:  you should have clean
     module interfaces, a nice decomposition, good comments, and so on.
-    <p>
 
   </ul>
--->
-  
+
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="sol">Solution</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+    Learning Switch: <a href="soln_LearningSwitch.java">FloodLight</a>, <a href="soln_LearningSwitch.py">Pox</a> <br/>
+    <!-- Learning Switch with ARP handler: -->
+  </p> 
 </font>
 
 <!--end HTML content-->

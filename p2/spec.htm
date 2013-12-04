@@ -18,7 +18,8 @@
   <a href="#parta">topologies</a> |
   <a href="#partb">assignment</a> |
   <a href="#partc">turn-in</a> |
-<!--  <a href="#turnin">how to submit</a> | -->
+  <a href="#grade">grading</a> |
+  <a href="#sol">solution</a> ]
   <p>
   
   <table cellSpacing="0" cellPadding="4" width="100%" border="0">
@@ -193,6 +194,27 @@ The archive should have following files:
     module interfaces, a nice decomposition, good comments, and so on.
 
   </ul>
+
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="sol">Solution</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+    The solution works on a single-switch topology. It assumes the first two hosts are servers (h1, h2), and the other hosts are clients. The solution contains a round-robin load balancer and an ARP handler for ARP requests to ask the load balancer's Ethernet address. The IP and MAC address of load balancer are 10.0.0.254 and 00:00:00:00:00:FE.<br/>
+    To test the solution, start the mininet with command:
+<pre>
+sudo mn --topo single,10 --mac --arp --switch ovsk --controller remote
+</pre>
+</p>
+<p>
+    Source code: <a href="soln_LoadBalancer.java">FloodLight</a>, <a href="soln_LoadBalancer.py">Pox</a> <br/>
+  </p> 
+  
 </font>
 
 <!--end HTML content-->
