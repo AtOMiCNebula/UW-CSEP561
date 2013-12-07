@@ -6,12 +6,23 @@ Jeff Weiner <jdweiner@cs.washington.edu>
 
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
+from pox.lib.addresses import EthAddr, IPAddr
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
 import time
 
 HARD_TIMEOUT = 30
 IDLE_TIMEOUT = 30
+
+NAT_IP_EXTERNAL = IPAddr("172.64.3.1")
+
+def GetMACFromIP(ip):
+  iptuple = tuple((ord(x) for x in ip.toRaw()))
+  if iptuple[0:3] == (10, 0, 1):
+    num = iptuple[3] - 100
+  elif iptuple[0:3] == (172, 64, 3):
+    num = iptuple[3] - 20 + 3
+  return EthAddr("00:00:00:00:00:%02x" % num)
 
 
 class NAT (EventMixin):
@@ -21,13 +32,16 @@ class NAT (EventMixin):
     # Switch we'll be adding NAT capabilities to
     self.connection = connection
     self.listenTo(connection)
+    self.natTable = []
+    self.natPortNext = 1024
 
     # Find which port our bridge is on
     ethMax = None
     for p in self.connection.features.ports:
       if ethMax is None or ethMax['name'] < p.name:
-        ethMax = { 'name': p.name, 'hw_addr': p.hw_addr }
+        ethMax = { 'name': p.name, 'hw_addr': p.hw_addr, 'port_no': p.port_no }
     self.if_external = ethMax['hw_addr']
+    self.port_external = ethMax['port_no']
     self.log.debug("Registered external interface %s on port %s" % (ethMax['hw_addr'], ethMax['name']))
 
   def IsInternalInterface(self, mac):
@@ -41,9 +55,62 @@ class NAT (EventMixin):
 
   def _handle_PacketIn (self, event):
     packet = event.parse()
+    packet_ipv4 = packet.find('ipv4')
+    packet_tcp = packet.find('tcp')
 
     if self.IsInternalInterface(packet.dst):
-      self.log.debug("Dropping packet on internal interface")
+      # Look for an existing entry in our NAT table for this connection
+      entry = { "src": packet.src, "dst": packet.dst,
+                "srcip": packet_ipv4.srcip, "dstip": packet_ipv4.dstip,
+                "srcport": packet_tcp.srcport, "dstport": packet_tcp.dstport }
+      for row in self.natTable:
+        intsc = { k:v for k,v in row.iteritems() if entry.has_key(k) }
+        if intsc == entry:
+          entry = row
+          break
+      if entry not in self.natTable:
+        # This is a new NAT table entry, so assign a translation port!
+        entry["natport"] = self.natPortNext
+        self.natPortNext += 1
+        self.natTable.append(entry)
+
+      # Create match patterns for outbound and inbound packets
+      match_out = of.ofp_match()
+      match_out.dl_type = packet.type
+      match_out.nw_proto = packet_ipv4.protocol
+      match_out.dl_dst = entry["dst"]
+      match_out.nw_dst = entry["dstip"]
+      match_out.tp_dst = entry["dstport"]
+      match_out.dl_src = entry["src"]
+      match_out.nw_src = entry["srcip"]
+      match_out.tp_src = entry["srcport"]
+      match_in = match_out.flip()
+      match_in.dl_src = GetMACFromIP(entry["dstip"])
+      match_in.dl_dst = self.if_external
+      match_in.nw_dst = NAT_IP_EXTERNAL
+      match_in.tp_dst = entry["natport"]
+
+      # Create flow rules
+      flow_in = of.ofp_flow_mod(match=match_in)
+      flow_out = of.ofp_flow_mod(match=match_out)
+      flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
+      flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["src"]))
+      flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["srcip"]))
+      flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["srcport"]))
+      flow_in.actions.append(of.ofp_action_output(port=event.port))
+      flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
+      flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
+      flow_out.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
+      flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["dstip"])))
+      flow_out.actions.append(of.ofp_action_output(port=self.port_external))
+      flow_in.in_port = self.port_external
+      flow_out.in_port = event.port
+      flow_out.data = event.ofp
+      self.connection.send(flow_in)
+      self.connection.send(flow_out)
+
+      self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["srcip"], entry["srcport"], entry["dstip"], entry["dstport"], entry["natport"]))
+
     elif self.IsExternalInterface(packet.dst):
       self.log.debug("Dropping packet on external interface")
 
