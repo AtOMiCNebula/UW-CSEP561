@@ -82,45 +82,48 @@ class NAT (EventMixin):
         entry["natport"] = self.GetNATPort(entry["srcip"], entry["srcport"])
         self.natTable.append(entry)
 
-      # Create match patterns for outbound and inbound packets
-      match_out = of.ofp_match()
-      match_out.dl_type = packet.type
-      match_out.nw_proto = packet_ipv4.protocol
-      match_out.dl_dst = entry["dst"]
-      match_out.nw_dst = entry["dstip"]
-      match_out.tp_dst = entry["dstport"]
-      match_out.dl_src = entry["src"]
-      match_out.nw_src = entry["srcip"]
-      match_out.tp_src = entry["srcport"]
-      match_in = match_out.flip()
-      match_in.dl_src = GetMACFromIP(entry["dstip"])
-      match_in.dl_dst = self.if_external
-      match_in.nw_dst = NAT_IP_EXTERNAL
-      match_in.tp_dst = entry["natport"]
-
-      # Create flow rules
-      flow_in = of.ofp_flow_mod(match=match_in)
-      flow_out = of.ofp_flow_mod(match=match_out)
-      flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
-      flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["src"]))
-      flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["srcip"]))
-      flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["srcport"]))
-      flow_in.actions.append(of.ofp_action_output(port=event.port))
-      flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
-      flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
-      flow_out.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
-      flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["dstip"])))
-      flow_out.actions.append(of.ofp_action_output(port=self.port_external))
-      flow_in.in_port = self.port_external
-      flow_out.in_port = event.port
-      flow_out.data = event.ofp
-      self.connection.send(flow_in)
-      self.connection.send(flow_out)
-
+      # Now, create the flows!
+      self.CreateFlows(event, packet.type, packet_ipv4.protocol, entry)
       self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["srcip"], entry["srcport"], entry["dstip"], entry["dstport"], entry["natport"]))
 
     elif self.IsExternalInterface(packet.dst):
       self.log.debug("Dropping packet on external interface")
+
+  def CreateFlows(self, event, dl_type, nw_proto, entry):
+    # Create match patterns for outbound and inbound packets
+    match_out = of.ofp_match()
+    match_out.dl_type = dl_type
+    match_out.nw_proto = nw_proto
+    match_out.dl_dst = entry["dst"]
+    match_out.nw_dst = entry["dstip"]
+    match_out.tp_dst = entry["dstport"]
+    match_out.dl_src = entry["src"]
+    match_out.nw_src = entry["srcip"]
+    match_out.tp_src = entry["srcport"]
+    match_in = match_out.flip()
+    match_in.dl_src = GetMACFromIP(entry["dstip"])
+    match_in.dl_dst = self.if_external
+    match_in.nw_dst = NAT_IP_EXTERNAL
+    match_in.tp_dst = entry["natport"]
+
+    # Create flow rules
+    flow_in = of.ofp_flow_mod(match=match_in)
+    flow_out = of.ofp_flow_mod(match=match_out)
+    flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
+    flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["src"]))
+    flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["srcip"]))
+    flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["srcport"]))
+    flow_in.actions.append(of.ofp_action_output(port=event.port))
+    flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
+    flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
+    flow_out.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
+    flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["dstip"])))
+    flow_out.actions.append(of.ofp_action_output(port=self.port_external))
+    flow_in.in_port = self.port_external
+    flow_out.in_port = event.port
+    flow_out.data = event.ofp
+    self.connection.send(flow_in)
+    self.connection.send(flow_out)
 
 
 class LearningSwitch (EventMixin):
