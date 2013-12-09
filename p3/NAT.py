@@ -33,6 +33,7 @@ class NAT (EventMixin):
     self.connection = connection
     self.listenTo(connection)
     self.natTable = []
+    self.natPorts = {}
     self.natPortNext = 1024
 
     # Find which port our bridge is on
@@ -53,6 +54,14 @@ class NAT (EventMixin):
   def IsExternalInterface(self, mac):
     return mac == self.if_external
 
+  # Distribute NAT ports according to an endpoint-independent mapping
+  def GetNATPort(self, srcip, srcport):
+    key = (srcip, srcport)
+    if key not in self.natPorts:
+      self.natPorts[key] = self.natPortNext
+      self.natPortNext += 1
+    return self.natPorts[key]
+
   def _handle_PacketIn (self, event):
     packet = event.parse()
     packet_ipv4 = packet.find('ipv4')
@@ -70,8 +79,7 @@ class NAT (EventMixin):
           break
       if entry not in self.natTable:
         # This is a new NAT table entry, so assign a translation port!
-        entry["natport"] = self.natPortNext
-        self.natPortNext += 1
+        entry["natport"] = self.GetNATPort(entry["srcip"], entry["srcport"])
         self.natTable.append(entry)
 
       # Create match patterns for outbound and inbound packets
