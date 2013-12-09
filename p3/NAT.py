@@ -10,10 +10,11 @@ from pox.lib.addresses import EthAddr, IPAddr
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
 from pox.openflow.libopenflow_01 import *
-import time
+from datetime import datetime
 
-HARD_TIMEOUT = 30
-IDLE_TIMEOUT = 30
+TIMEOUT_LEARNINGSWITCH = 30
+TIMEOUT_ESTABLISHEDIDLE = 7440
+TIMEOUT_TRANSITORYIDLE = 300
 
 NAT_IP_EXTERNAL = IPAddr("172.64.3.1")
 
@@ -110,14 +111,21 @@ class NAT (EventMixin):
 
     if entry is not None:
       # Look for an existing entry in our NAT table for this connection
+      natTableCleanup = []
       for row in self.natTable:
-        intsc = { k:v for k,v in row.iteritems() if entry.has_key(k) }
-        if intsc == entry:
-          entry = row
-          break
+        if "lastseen" in row and (datetime.now()-row["lastseen"]).seconds > row["timeout"]:
+          natTableCleanup.append(row)
+        else:
+          intsc = { k:v for k,v in row.iteritems() if entry.has_key(k) }
+          if intsc == entry:
+            entry = row
+            break
+      for row in natTableCleanup:
+        self.natTable.remove(row)
 
       # From the row we may have found, determine what state the connection
       # establishment is in
+      entry["lastseen"] = datetime.now()
       established = False
       if entry not in self.natTable:
         # This is a new NAT table entry, so assign a translation port and
@@ -125,6 +133,7 @@ class NAT (EventMixin):
         entry["natport"] = self.GetNATPort(entry["intip"], entry["intport"])
         entry["outbound"] = dataGoingOut
         entry["intseq" if dataGoingOut else "extseq"] = packet_tcp.seq
+        entry["timeout"] = TIMEOUT_TRANSITORYIDLE
         self.natTable.append(entry)
       elif "intacked" not in entry or "extacked" not in entry:
         connector = "int" if entry["outbound"] else "ext"
@@ -143,6 +152,7 @@ class NAT (EventMixin):
         # If we've seen both seq numbers acked, then we're established
         if "intacked" in entry and "extacked" in entry:
           established = True
+          entry["timeout"] = TIMEOUT_ESTABLISHEDIDLE
 
       # Now, pass the data along, or create the flows if we established!
       if not established:
@@ -192,6 +202,7 @@ class NAT (EventMixin):
     flow_in.in_port = self.port_external
     flow_out.in_port = GetPortFromIP(entry["intip"])
     (flow_out if dataGoingOut else flow_in).data = event.ofp
+    flow_in.idle_timeout = flow_out.idle_timeout = TIMEOUT_ESTABLISHEDIDLE
     self.connection.send(flow_in)
     self.connection.send(flow_out)
 
@@ -245,8 +256,7 @@ class LearningSwitch (EventMixin):
       # flow, since this is either the initial discovery, or the flow expired.
       self.log.debug("Creating flow for %s to port %s" % (packet.dst, self.mactable[packet.dst]))
       fm = of.ofp_flow_mod()
-      fm.idle_timeout = IDLE_TIMEOUT
-      fm.hard_timeout = HARD_TIMEOUT
+      fm.idle_timeout = TIMEOUT_LEARNINGSWITCH
       fm.actions.append(of.ofp_action_output(port=self.mactable[packet.dst]))
 
       # Defining the match via from_packet will cause us to establish a flow
