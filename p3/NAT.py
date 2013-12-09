@@ -9,6 +9,7 @@ import pox.openflow.libopenflow_01 as of
 from pox.lib.addresses import EthAddr, IPAddr
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
+from pox.openflow.libopenflow_01 import *
 import time
 
 HARD_TIMEOUT = 30
@@ -88,6 +89,18 @@ class NAT (EventMixin):
 
     elif self.IsExternalInterface(packet.dst):
       self.log.debug("Dropping packet on external interface")
+
+    else:
+      # Packet is not trying to cross the NAT boundary
+      if event.port != self.port_external:
+        # Packet is on the internal side, flood it out internal ports
+        msg = of.ofp_packet_out()
+        for p in self.connection.features.ports:
+          if not p.config & OFPPC_PORT_DOWN and p.port_no not in (event.port, self.port_external):
+            msg.actions.append(of.ofp_action_output(port=p.port_no))
+        msg.buffer_id = event.ofp.buffer_id
+        msg.in_port = event.port
+        self.connection.send(msg)
 
   def CreateFlows(self, event, dl_type, nw_proto, entry):
     # Create match patterns for outbound and inbound packets
