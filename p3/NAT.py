@@ -55,8 +55,8 @@ class NAT (EventMixin):
     return mac == self.if_external
 
   # Distribute NAT ports according to an endpoint-independent mapping
-  def GetNATPort(self, srcip, srcport):
-    key = (srcip, srcport)
+  def GetNATPort(self, intip, intport):
+    key = (intip, intport)
     if key not in self.natPorts:
       self.natPorts[key] = self.natPortNext
       self.natPortNext += 1
@@ -69,9 +69,9 @@ class NAT (EventMixin):
 
     if self.IsInternalInterface(packet.dst):
       # Look for an existing entry in our NAT table for this connection
-      entry = { "src": packet.src, "dst": packet.dst,
-                "srcip": packet_ipv4.srcip, "dstip": packet_ipv4.dstip,
-                "srcport": packet_tcp.srcport, "dstport": packet_tcp.dstport }
+      entry = { "int": packet.src, "ext": packet.dst,
+                "intip": packet_ipv4.srcip, "extip": packet_ipv4.dstip,
+                "intport": packet_tcp.srcport, "extport": packet_tcp.dstport }
       for row in self.natTable:
         intsc = { k:v for k,v in row.iteritems() if entry.has_key(k) }
         if intsc == entry:
@@ -79,12 +79,12 @@ class NAT (EventMixin):
           break
       if entry not in self.natTable:
         # This is a new NAT table entry, so assign a translation port!
-        entry["natport"] = self.GetNATPort(entry["srcip"], entry["srcport"])
+        entry["natport"] = self.GetNATPort(entry["intip"], entry["intport"])
         self.natTable.append(entry)
 
       # Now, create the flows!
       self.CreateFlows(event, packet.type, packet_ipv4.protocol, entry)
-      self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["srcip"], entry["srcport"], entry["dstip"], entry["dstport"], entry["natport"]))
+      self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["intip"], entry["intport"], entry["extip"], entry["extport"], entry["natport"]))
 
     elif self.IsExternalInterface(packet.dst):
       self.log.debug("Dropping packet on external interface")
@@ -94,14 +94,14 @@ class NAT (EventMixin):
     match_out = of.ofp_match()
     match_out.dl_type = dl_type
     match_out.nw_proto = nw_proto
-    match_out.dl_dst = entry["dst"]
-    match_out.nw_dst = entry["dstip"]
-    match_out.tp_dst = entry["dstport"]
-    match_out.dl_src = entry["src"]
-    match_out.nw_src = entry["srcip"]
-    match_out.tp_src = entry["srcport"]
+    match_out.dl_dst = entry["ext"]
+    match_out.nw_dst = entry["extip"]
+    match_out.tp_dst = entry["extport"]
+    match_out.dl_src = entry["int"]
+    match_out.nw_src = entry["intip"]
+    match_out.tp_src = entry["intport"]
     match_in = match_out.flip()
-    match_in.dl_src = GetMACFromIP(entry["dstip"])
+    match_in.dl_src = GetMACFromIP(entry["extip"])
     match_in.dl_dst = self.if_external
     match_in.nw_dst = NAT_IP_EXTERNAL
     match_in.tp_dst = entry["natport"]
@@ -110,14 +110,14 @@ class NAT (EventMixin):
     flow_in = of.ofp_flow_mod(match=match_in)
     flow_out = of.ofp_flow_mod(match=match_out)
     flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
-    flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["src"]))
-    flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["srcip"]))
-    flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["srcport"]))
+    flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["int"]))
+    flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["intip"]))
+    flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["intport"]))
     flow_in.actions.append(of.ofp_action_output(port=event.port))
     flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
     flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
     flow_out.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
-    flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["dstip"])))
+    flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["extip"])))
     flow_out.actions.append(of.ofp_action_output(port=self.port_external))
     flow_in.in_port = self.port_external
     flow_out.in_port = event.port
