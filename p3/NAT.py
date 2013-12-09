@@ -156,21 +156,27 @@ class NAT (EventMixin):
     # Create flow rules
     flow_in = of.ofp_flow_mod(match=match_in)
     flow_out = of.ofp_flow_mod(match=match_out)
-    flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
-    flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["int"]))
-    flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["intip"]))
-    flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["intport"]))
-    flow_in.actions.append(of.ofp_action_output(port=GetPortFromIP(entry["intip"])))
-    flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
-    flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
-    flow_out.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
-    flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["extip"])))
-    flow_out.actions.append(of.ofp_action_output(port=self.port_external))
+    self.CreateActions(flow_in.actions, entry, False)
+    self.CreateActions(flow_out.actions, entry, True)
     flow_in.in_port = self.port_external
     flow_out.in_port = GetPortFromIP(entry["intip"])
     (flow_out if dataGoingOut else flow_in).data = event.ofp
     self.connection.send(flow_in)
     self.connection.send(flow_out)
+
+  def CreateActions(self, actions, entry, outbound):
+    if outbound:
+      actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
+      actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
+      actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
+      actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["extip"])))
+      actions.append(of.ofp_action_output(port=self.port_external))
+    else:
+      actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
+      actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["int"]))
+      actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["intip"]))
+      actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["intport"]))
+      actions.append(of.ofp_action_output(port=GetPortFromIP(entry["intip"])))
 
 
 class LearningSwitch (EventMixin):
