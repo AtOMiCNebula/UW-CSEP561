@@ -115,14 +115,45 @@ class NAT (EventMixin):
         if intsc == entry:
           entry = row
           break
-      if entry not in self.natTable:
-        # This is a new NAT table entry, so assign a translation port!
-        entry["natport"] = self.GetNATPort(entry["intip"], entry["intport"])
-        self.natTable.append(entry)
 
-      # Now, create the flows!
-      self.CreateFlows(event, packet.type, packet_ipv4.protocol, dataGoingOut, entry)
-      self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["intip"], entry["intport"], entry["extip"], entry["extport"], entry["natport"]))
+      # From the row we may have found, determine what state the connection
+      # establishment is in
+      established = False
+      if entry not in self.natTable:
+        # This is a new NAT table entry, so assign a translation port and
+        # record the initial connection state
+        entry["natport"] = self.GetNATPort(entry["intip"], entry["intport"])
+        entry["outbound"] = dataGoingOut
+        entry["intseq" if dataGoingOut else "extseq"] = packet_tcp.seq
+        self.natTable.append(entry)
+      elif "intacked" not in entry or "extacked" not in entry:
+        connector = "int" if entry["outbound"] else "ext"
+        connectee = "ext" if entry["outbound"] else "int"
+        if packet_ipv4.srcip == (entry["%sip" % connectee]):
+          # This is a packet from the connectee
+          if not entry.has_key("%sseq" % connectee):
+            entry["%sseq" % connectee] = packet_tcp.seq
+          if packet_tcp.ack == (entry["%sseq" % connector]+1):
+            entry["%sacked" % connectee] = True
+        else:
+          # This is a packet from the connector
+          if packet_tcp.ack and packet_tcp.ack == (entry["%sseq" % connectee]+1):
+            entry["%sacked" % connector] = True
+
+        # If we've seen both seq numbers acked, then we're established
+        if "intacked" in entry and "extacked" in entry:
+          established = True
+
+      # Now, pass the data along, or create the flows if we established!
+      if not established:
+        msg = of.ofp_packet_out()
+        self.CreateActions(msg.actions, entry, dataGoingOut)
+        msg.buffer_id = event.ofp.buffer_id
+        msg.in_port = event.port
+        self.connection.send(msg)
+      else:
+        self.CreateFlows(event, packet.type, packet_ipv4.protocol, dataGoingOut, entry)
+        self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["intip"], entry["intport"], entry["extip"], entry["extport"], entry["natport"]))
 
     if not crossingBoundary:
       # Packet is not trying to cross the NAT boundary
