@@ -70,7 +70,7 @@ class NAT (EventMixin):
 
     if self.IsInternalInterface(packet.dst):
       # Look for an existing entry in our NAT table for this connection
-      entry = { "int": packet.src, "ext": packet.dst,
+      entry = { "int": packet.src, "ext": GetMACFromIP(packet_ipv4.dstip),
                 "intip": packet_ipv4.srcip, "extip": packet_ipv4.dstip,
                 "intport": packet_tcp.srcport, "extport": packet_tcp.dstport }
       for row in self.natTable:
@@ -84,7 +84,7 @@ class NAT (EventMixin):
         self.natTable.append(entry)
 
       # Now, create the flows!
-      self.CreateFlows(event, packet.type, packet_ipv4.protocol, entry)
+      self.CreateFlows(event, packet.type, packet_ipv4.protocol, packet.dst, entry)
       self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["intip"], entry["intport"], entry["extip"], entry["extport"], entry["natport"]))
 
     elif self.IsExternalInterface(packet.dst):
@@ -102,12 +102,12 @@ class NAT (EventMixin):
         msg.in_port = event.port
         self.connection.send(msg)
 
-  def CreateFlows(self, event, dl_type, nw_proto, entry):
+  def CreateFlows(self, event, dl_type, nw_proto, mac_internal, entry):
     # Create match patterns for outbound and inbound packets
     match_out = of.ofp_match()
     match_out.dl_type = dl_type
     match_out.nw_proto = nw_proto
-    match_out.dl_dst = entry["ext"]
+    match_out.dl_dst = mac_internal
     match_out.nw_dst = entry["extip"]
     match_out.tp_dst = entry["extport"]
     match_out.dl_src = entry["int"]
