@@ -25,6 +25,10 @@ def GetMACFromIP(ip):
     num = iptuple[3] - 20 + 3
   return EthAddr("00:00:00:00:00:%02x" % num)
 
+def GetPortFromIP(ip):
+  iptuple = tuple((ord(x) for x in ip.toRaw()))
+  return iptuple[3] - 100
+
 
 class NAT (EventMixin):
   def __init__ (self,connection,name):
@@ -63,16 +67,49 @@ class NAT (EventMixin):
       self.natPortNext += 1
     return self.natPorts[key]
 
+  # Allow inbound connections according to an endpoint-independent filtering
+  def GetInternalMapping(self, natport):
+    for key in self.natPorts.iterkeys():
+      if self.natPorts[key] == natport:
+        return { "ip": key[0], "port": key[1] }
+    return None
+
+  # Returns what port number this internal IP is on
+  def GetInternalInterfaceFromIP(self, ip):
+    iptuple = tuple((ord(x) for x in ip.toRaw()))
+    port_no = iptuple[3] - 100
+    for p in self.connection.features.ports:
+      if p.port_no == port_no:
+        return p.hw_addr
+    return None
+
   def _handle_PacketIn (self, event):
     packet = event.parse()
     packet_ipv4 = packet.find('ipv4')
     packet_tcp = packet.find('tcp')
 
-    if self.IsInternalInterface(packet.dst):
+    crossingBoundary = False
+    dataGoingOut = False
+    entry = None
+    if self.IsInternalInterface(packet.dst) or self.IsExternalInterface(packet.dst):
+      crossingBoundary = True
+      if self.IsInternalInterface(packet.dst):
+        entry = { "int": packet.src, "ext": GetMACFromIP(packet_ipv4.dstip),
+                  "intip": packet_ipv4.srcip, "extip": packet_ipv4.dstip,
+                  "intport": packet_tcp.srcport, "extport": packet_tcp.dstport }
+        dataGoingOut = True
+      elif self.IsExternalInterface(packet.dst):
+        # Check if the NAT knows what this port corresponds to
+        mapping = self.GetInternalMapping(packet_tcp.dstport)
+        if mapping is not None:
+          entry = { "int": GetMACFromIP(mapping["ip"]), "ext": packet.src,
+                    "intip": mapping["ip"], "extip": packet_ipv4.srcip,
+                    "intport": mapping["port"], "extport": packet_tcp.srcport }
+        else:
+          self.log.debug("Dropping packet on external interface")
+
+    if entry is not None:
       # Look for an existing entry in our NAT table for this connection
-      entry = { "int": packet.src, "ext": GetMACFromIP(packet_ipv4.dstip),
-                "intip": packet_ipv4.srcip, "extip": packet_ipv4.dstip,
-                "intport": packet_tcp.srcport, "extport": packet_tcp.dstport }
       for row in self.natTable:
         intsc = { k:v for k,v in row.iteritems() if entry.has_key(k) }
         if intsc == entry:
@@ -84,13 +121,10 @@ class NAT (EventMixin):
         self.natTable.append(entry)
 
       # Now, create the flows!
-      self.CreateFlows(event, packet.type, packet_ipv4.protocol, packet.dst, entry)
+      self.CreateFlows(event, packet.type, packet_ipv4.protocol, dataGoingOut, entry)
       self.log.debug("New NAT entry: %s:%d -> %s:%d, p=%d" % (entry["intip"], entry["intport"], entry["extip"], entry["extport"], entry["natport"]))
 
-    elif self.IsExternalInterface(packet.dst):
-      self.log.debug("Dropping packet on external interface")
-
-    else:
+    if not crossingBoundary:
       # Packet is not trying to cross the NAT boundary
       if event.port != self.port_external:
         # Packet is on the internal side, flood it out internal ports
@@ -102,12 +136,12 @@ class NAT (EventMixin):
         msg.in_port = event.port
         self.connection.send(msg)
 
-  def CreateFlows(self, event, dl_type, nw_proto, mac_internal, entry):
+  def CreateFlows(self, event, dl_type, nw_proto, dataGoingOut, entry):
     # Create match patterns for outbound and inbound packets
     match_out = of.ofp_match()
     match_out.dl_type = dl_type
     match_out.nw_proto = nw_proto
-    match_out.dl_dst = mac_internal
+    match_out.dl_dst = self.GetInternalInterfaceFromIP(entry["extip"])
     match_out.nw_dst = entry["extip"]
     match_out.tp_dst = entry["extport"]
     match_out.dl_src = entry["int"]
@@ -126,15 +160,15 @@ class NAT (EventMixin):
     flow_in.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, entry["int"]))
     flow_in.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_DST, entry["intip"]))
     flow_in.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_DST, entry["intport"]))
-    flow_in.actions.append(of.ofp_action_output(port=event.port))
+    flow_in.actions.append(of.ofp_action_output(port=GetPortFromIP(entry["intip"])))
     flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_SRC, self.if_external))
     flow_out.actions.append(of.ofp_action_nw_addr(of.OFPAT_SET_NW_SRC, NAT_IP_EXTERNAL))
     flow_out.actions.append(of.ofp_action_tp_port(of.OFPAT_SET_TP_SRC, entry["natport"]))
     flow_out.actions.append(of.ofp_action_dl_addr(of.OFPAT_SET_DL_DST, GetMACFromIP(entry["extip"])))
     flow_out.actions.append(of.ofp_action_output(port=self.port_external))
     flow_in.in_port = self.port_external
-    flow_out.in_port = event.port
-    flow_out.data = event.ofp
+    flow_out.in_port = GetPortFromIP(entry["intip"])
+    (flow_out if dataGoingOut else flow_in).data = event.ofp
     self.connection.send(flow_in)
     self.connection.send(flow_out)
 
