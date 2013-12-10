@@ -40,7 +40,9 @@ class NAT (EventMixin):
     self.listenTo(connection)
     self.natTable = []
     self.natPorts = {}
+    self.natPortsReverse = {}
     self.natPortNext = 1024
+    self.natPortBounds = (1024, 65535)
 
     # Find which port our bridge is on
     ethMax = None
@@ -64,15 +66,41 @@ class NAT (EventMixin):
   def GetNATPort(self, intip, intport):
     key = (intip, intport)
     if key not in self.natPorts:
+      startPort = self.natPortNext
+      while self.natPortNext in self.natPortsReverse:
+        self.natPortNext += 1
+        if self.natPortNext > self.natPortBounds[1]:
+          self.natPortNext = self.natPortBounds[0]
+        if self.natPortNext == startPort:
+          self.log.error("NAT port space exhausted, unable to allocate another")
+          return None   # this won't end well...
+
       self.natPorts[key] = self.natPortNext
+      self.natPortsReverse[self.natPortNext] = key
       self.natPortNext += 1
+      if self.natPortNext > self.natPortBounds[1]:
+        self.natPortNext = self.natPortBounds[0]
     return self.natPorts[key]
+
+  # Check if any consumers of this NAT port remain
+  def ReleaseNATPort(self, natport):
+    foundOne = False
+    for row in self.natTable:
+      if row["natport"] == natport:
+        foundOne = True
+        break
+
+    if not foundOne:
+      self.log.debug("Recycling port %d" % natport)
+      key = self.natPortsReverse[natport]
+      del self.natPorts[key]
+      del self.natPortsReverse[natport]
 
   # Allow inbound connections according to an endpoint-independent filtering
   def GetInternalMapping(self, natport):
-    for key in self.natPorts.iterkeys():
-      if self.natPorts[key] == natport:
-        return { "ip": key[0], "port": key[1] }
+    if natport in self.natPortsReverse:
+      key = self.natPortsReverse[natport]
+      return { "ip": key[0], "port": key[1] }
     return None
 
   # Returns what port number this internal IP is on
@@ -122,6 +150,7 @@ class NAT (EventMixin):
             break
       for row in natTableCleanup:
         self.natTable.remove(row)
+        self.ReleaseNATPort(row["natport"])
 
       # From the row we may have found, determine what state the connection
       # establishment is in
