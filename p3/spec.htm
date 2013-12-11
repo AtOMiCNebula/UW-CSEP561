@@ -1,0 +1,273 @@
+
+<HTML>
+<head>
+<title>CSEP 561 Project #3</title>
+</head>
+
+<body>
+
+<font face=Arial size=2>
+  <H3>CSE561 Project #3</H3>
+
+  <b>out:</b> Friday November 22nd, 2013<br>
+  <b>due:</b> Tuesday December 10th, 2013 by <b>5:00pm</b>.
+  <p>
+
+  [
+  <a href="#summary">summary</a> |
+  <a href="#parta">overview</a> |
+  <a href="#partb">NAT logic</a> |
+  <a href="#turn-in">turn-in</a> |
+  <a href="#grade">grading</a> ]
+  <p>
+  
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="summary">Summary</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+In this project you will be writing a simple NAT that can handle TCP. It will implement a subset of the functionality specified by RFC5382.  You can refer to the RFC for what is expected of NATs. <p>
+
+ <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="parta"> Overview </a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+<p>Before beginning this lab, it is crucial that you:</p>
+
+<ul>
+<li>Understand how NATs work. Consider looking at the NAT slides from the lecture.</li>
+<li>Understand TCP handshake and teardown packet sequences. Consider working through the TCP state diagram.</li>
+</ul>
+
+<p> We will create a NAT that sits in Mininet between the app servers
+and the client.  The internal interface of the NAT faces the client,
+while the external interfaces are connected to app servers. The app
+servers are "outside" the NAT, while the client is "inside."  </p>
+
+<p>The topology of NAT is as follows, where the NAT's internal
+interface (eth1) faces the client and its external interface (eth2)
+has two application servers connected with a switch:</p>
+
+<p><img src="spec_nat.png" alt="alt text" title="Topology for
+NAT"></p>
+
+<p>You first need to set up the NAT environment in mininet. Download the tarball in the mininet virtual machine under your home directory:
+<pre>
+wget http://courses.cs.washington.edu/courses/csep561/13au/projects/setup.tgz
+tar xzvf setup.tgz
+</pre>
+To start the mininet, run:
+<pre>
+sudo ./run_mininet.py --arp --mac --cip=&lt;Your controller IP addr&gt;
+</pre>
+Option description:
+<ul>
+<li>--arp: let the mininet initialize the static ARP entries in each host. For extra credit, you can disable the --arp option and have your NAT handle ARP reply/request.</li>
+<li>--mac: set the MAC address of each host to a simple value, such as 00:00:00:00:00:01. (In this case, the MAC address of each host will be a fixed value, and won't vary at each runtime.)</li>
+<li>--cip: set the remote controller IP address. Default is localhost (127.0.0.1).</li>
+</ul>
+</p>
+
+<p>
+Feel free to look inside the script and customize it in whatever way suits your implementation. Some tips/notes about the environment:
+</p>
+<ul>
+  <li>Each server runs a simple HTTP server, serving at port 8000.</li>
+  <li>NAT internal and external IP addresses are 10.0.1.1 and 172.64.3.1 respectively. The IP configuration refers to file IP_CONFIG in the tarball.</li>
+  <li>The switch in the figure only needs to act as a learning switch. You can directly use your code from Project 1.</li>
+  <li>Server1 and server2 operate in folder <em>http_server1</em> and <em>http_server2</em> respectively. You can put any files in those folders for clients to download. Clients also operate in different folders.
+  <li>If the mininet setting has some problem on your virtual machine, you can try 'sudo mn -c' to clear the previous setting.
+</ul>
+
+<p>These are the major parts of the assignment:</p>
+
+<ul>
+<li>translating TCP packets</li>
+<li>cleaning up defunct mappings between internal addresses and the external address.
+Note that your NAT is not required to handle UDP. It is entirely up to you whether you drop or forward UDP traffic.</li>
+</ul>
+
+<p>A correct implementation should support the following operations
+from the emulated client host:</p>
+
+<ul>
+  <li>Clients should be able to download files under directory <em>http_server1 or http_server2</em> using HTTP from the app servers. Client specifies the server to download files.</li>
+  <li>All packets to external hosts (app servers) should appear to come from eth2's address (e.g., 172.64.3.1 above).</li>
+</ul>
+
+ <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="partb"> NAT Logic </a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+<p>When an internal host opens a TCP connection to an external host, your NAT must rewrite the packet so that it appears as if it is coming from the NAT's external address. This requires allocating a globally unique port, under a set of restrictions as detailed below. The requirements for your NAT are a subset of those in specified in <a href="https://tools.ietf.org/html/rfc5382">RFC5382</a>; in some cases they are more restrictive. Refer to the RFC for details on the terms used. Your NAT has the following requirements:</p>
+
+<ul>
+
+<li>Your NAT MUST have an "Endpoint-Independent Mapping" behavior for
+TCP.  You can refer to the RFC for this requirement, but here is a
+quick informal summary of it: The NAT reuses the port binding for
+subsequent sessions initiated from the same internal IP address and
+port to any external IP address and port. </li>
+
+<li>Your NAT MUST support all valid sequences of TCP packets (defined
+in <a href="http://tools.ietf.org/html/rfc793">RFC0793</a>) for
+connections initiated both internally as well as externally when the
+connection is permitted by the NAT. In particular, in addition to
+handling the TCP 3-way handshake mode of connection initiation, A NAT
+MUST handle the
+TCP <a href="http://ttcplinux.sourceforge.net/documents/one/tcpstate/tcpstate.html">simultaneous-open
+mode of connection initiation</a>.</li>
+
+<li>Your NAT MUST have an "Endpoint-Independent Filtering" behavior
+for TCP.  Again refer to the RFC for this requirement.</li>
+
+
+<li>Your NAT MUST NOT have a "Port assignment" behavior of "Port
+overloading" for TCP.</li>
+
+<li> When assigning a port to a mapping, you are free to choose a port
+any way you choose. The only requirement is that you do not use the
+well-known ports (0-1023).</li>
+
+<li> Be sure that your NAT's mapping data structure uses locks if
+there is going to be concurrency in the controller, otherwise nasty
+concurrency bugs will be sure to crop up.
+</ul>
+
+<p>As noted above, mappings should be Endpoint Independent. Once a
+mapping is made between an internal host's (ip, port) pair to an
+external port in the NAT, any traffic from that host's (ip, port)
+directed to any external host, and any traffic from any external host
+to the mapped external port will be rewritten and forwarded
+accordingly.</p>
+
+<h3>
+<a name="cleaning-up-defunct-mappings" class="anchor" href="#cleaning-up-defunct-mappings"><span class="octicon octicon-link"></span></a>Cleaning up defunct mappings</h3>
+
+<p>Your NAT must clean up defunct mappings. Your NAT must periodically
+timeout idle TCP connections. Once all connections using a particular
+mapping are closed or timed out, the mapping should be cleared. Once
+cleared, a mapping can be reused in new connections.</p>
+
+<p>The periodic function that handles timeouts should use the following timeout
+intervals:</p>
+
+<ul>
+<li> TCP Established Idle Timeout in seconds (default to 7440)</li>
+<li> TCP Transitory Idle Timeout in seconds (default to 300)</li>
+</ul>
+
+<p>TCP Established Idle Timeout applies to TCP connections in the
+established (data transfer) state. TCP Transitory Idle Timeout applies
+to connections in other states (e.g. LISTEN). Refer to the TCP state
+diagram.</p>
+
+
+<h3>
+<a name="tracking-connections" class="anchor" href="#tracking-connections"><span class="octicon octicon-link"></span></a>Tracking Connections</h3>
+
+<p>You do not need to keep lots of state per connection. For example, there is no need to track seqnos or window values or ensure TCP packets are in proper order to the end hosts. Keep only the information that is useful to the NAT for establishing or clearing mappings.</p>
+
+<p>Each time the controller receives a new TCP flow, it should install a new rule to the NAT which modifies a few fields in data link, network and transport headers. The OpenFlow switch will automatically update the IP and TCP checksums.
+</p>
+<!--
+<p>When rewriting TCP packets, remember to update the checksum (over the pseudo-header, tcp header, and payload). The TCP checksum is calculated like the IP checksum, so you can reuse the cksum function. Note that if the checksum is incorrect when the packet comes in, you can drop it; you should not "correct the checksum" as that would hide potential attackers or errors.</p>
+-->
+<h3>
+<a name="optional" class="anchor" href="#optional"><span class="octicon octicon-link"></span></a>Optional</h3>
+
+<p>
+A few optional functions of the NAT for extra credit:</p>
+<ul>
+  <li>Handle ARP requests/replies.</li>
+<!--  <li>Translate IP address for ICMP echo request/reply.</li> -->
+  <li>Implement Firewall in the NAT, such as clients are allowed to access http server1 but not http server2</li>
+  <li>Implement DHCP server in the NAT</li>
+</ul>
+
+<h3>
+<a name="tips" class="anchor" href="#tips"><span class="octicon octicon-link"></span></a>Tips for Floodlight Users</h3>
+
+
+<p>
+A few hints for flooding users:</p>
+
+<ul>
+<li>The following actions will allow you to change fields in the packets:
+    <ul>
+    <li><code>OFActionDataLayerDestination</code> -- changes the destination
+    MAC</li>
+    <li><code>OFActionDataLayerSource</code> -- changes the source
+    MAC</li>
+    <li><code>OFActionNetworkLayerDestination</code> -- changes the destination
+    IP</li>
+    <li><code>OFActionNetworkLayerSource</code> -- changes the source
+    IP</li>
+    </ul>
+</li>
+</ul>
+
+<table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="turn-in">Turn in instructions</a>
+       </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+
+Please turn in a tarball or a zip file at <a href="https://catalyst.uw.edu/collectit/dropbox/summary/arvindk/29361">https://catalyst.uw.edu/collectit/dropbox/summary/arvindk/29361</a>. <br/>
+The archive should have following files:
+<ul>
+  <li> your source code with comments;
+  <li> a readme file including your name, email address, and the platform you use;
+  <li> transcript of the commands that you executed to test the code and the output from the commands;
+  <li> a report that contains what you did, results and discussion, and experience you learnt from.
+</ul>
+ 
+  <table cellSpacing="0" cellPadding="4" width="100%" border="0">
+    <tr bgColor="#ffd700">
+      <td class="part" width="100%">
+        <font face=Arial size=3>
+        <a name="grade">Grading</a>
+        </font>
+      </td>
+    </tr>
+  </table>
+  <p>
+  We will be basing your grade on several elements:
+  <ul>
+    <li> Whether your code works!  It should be correct, compile
+    without warnings, and not leak memory, processes, descriptors, etc.
+
+    <li> How well structured your code is:  you should have clean
+    module interfaces, a nice decomposition, good comments, and so on.
+
+  </ul>
+</font>
+
+<!--end HTML content-->
+</body>
+</html>
