@@ -10,6 +10,7 @@ from pox.lib.addresses import EthAddr, IPAddr
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
 from datetime import datetime
+import time
 
 TIMEOUT_LEARNINGSWITCH = 30
 TIMEOUT_ESTABLISHEDIDLE = 7440
@@ -140,7 +141,7 @@ class NAT (EventMixin):
       # Look for an existing entry in our NAT table for this connection
       natTableCleanup = []
       for row in self.natTable:
-        if "lastseen" in row and (datetime.now()-row["lastseen"]).seconds > row["timeout"]:
+        if "lastseen" in row and (datetime.now()-row["lastseen"]).seconds > row["timeout"] and row["timeout"] > 0:
           natTableCleanup.append(row)
         else:
           intsc = { k:v for k,v in row.iteritems() if entry.has_key(k) }
@@ -180,7 +181,7 @@ class NAT (EventMixin):
         # If we've seen both seq numbers acked, then we're established
         if "intacked" in entry and "extacked" in entry:
           established = True
-          entry["timeout"] = TIMEOUT_ESTABLISHEDIDLE
+          entry["timeout"] = 0  # flow rule will now enforce the timeout
 
       # Now, pass the data along, or create the flows if we established!
       if not established:
@@ -204,6 +205,21 @@ class NAT (EventMixin):
         msg.buffer_id = event.ofp.buffer_id
         msg.in_port = event.port
         self.connection.send(msg)
+
+  def _handle_FlowRemoved (self, event):
+    if event.timeout:
+      for entry in self.natTable:
+        if entry["cookie"] == event.ofp.cookie:
+          # One flow has just timed out, make sure we delete its other side
+          flow_del = of.ofp_flow_mod()
+          flow_del.command = of.OFPFC_DELETE
+          flow_del.match = entry["flow_matches"][1 if event.ofp.match == entry["flow_matches"][0] else 0]
+          self.connection.send(flow_del)
+
+          self.log.debug("FlowRemoved for %s:%d -> %s:%d, p=%d" % (entry["intip"], entry["intport"], entry["extip"], entry["extport"], entry["natport"]))
+          self.natTable.remove(entry)
+          self.ReleaseNATPort(entry["natport"])
+        break
 
   def CreateFlows(self, event, dl_type, nw_proto, dataGoingOut, entry):
     # Create match patterns for outbound and inbound packets
@@ -231,6 +247,14 @@ class NAT (EventMixin):
     flow_out.in_port = GetPortFromIP(entry["intip"])
     (flow_out if dataGoingOut else flow_in).data = event.ofp
     flow_in.idle_timeout = flow_out.idle_timeout = TIMEOUT_ESTABLISHEDIDLE
+
+    # Set cookies for the flows, and link the match structures to the entry
+    # so that we can ensure both are cancelled when one expires
+    flow_in.flags = flow_out.flags = of.OFPFF_SEND_FLOW_REM
+    flow_in.cookie = flow_out.cookie = int(time.time()*1000000)
+    entry["cookie"] = flow_in.cookie
+    entry["flow_matches"] = (match_in, match_out)
+
     self.connection.send(flow_in)
     self.connection.send(flow_out)
 
