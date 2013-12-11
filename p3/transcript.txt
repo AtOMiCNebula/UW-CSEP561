@@ -1,0 +1,31 @@
+CSE P 561 Network Systems - Project 3 (Network Address Translation)
+December 10th, 2013
+Jeff Weiner <jdweiner@cs.washington.edu>
+
+Commands run, and their output:
+
+
+To launch the controller:
+    ~/pox$  ./pox.py log.level --DEBUG NAT
+
+
+To launch mininet:
+    ~/p3/setup$  sudo ./run_mininet.py --arp --mac
+
+
+Commands run in mininet (with slightly trimmed output) demonstrating the
+endpoint-independent mapping and filtering behaviors:
+    mininet> client1 curl --local-port 50000 http://172.64.3.21:8000/
+        [...html output showing http_server1's directory listing...]
+
+    mininet> client1 curl --local-port 50000 http://172.64.3.22:8000/
+        [...html output showing http_server2's directory listing...]
+
+      (after copying webserver.py into client1's directory and modifying it to
+       bind to port 50000)
+    mininet> xterm client1
+    mininet-xterm-client1> python ./webserver.py
+        serving at port 50000
+
+    mininet> server2 curl http://172.64.3.1:1024/
+        [...html output showing client1's directory listing...]
