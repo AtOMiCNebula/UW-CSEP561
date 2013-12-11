@@ -9,7 +9,6 @@ import pox.openflow.libopenflow_01 as of
 from pox.lib.addresses import EthAddr, IPAddr
 from pox.lib.revent import *
 from pox.lib.util import dpidToStr
-from pox.openflow.libopenflow_01 import *
 from datetime import datetime
 
 TIMEOUT_LEARNINGSWITCH = 30
@@ -200,7 +199,7 @@ class NAT (EventMixin):
         # Packet is on the internal side, flood it out internal ports
         msg = of.ofp_packet_out()
         for p in self.connection.features.ports:
-          if not p.config & OFPPC_PORT_DOWN and p.port_no not in (event.port, self.port_external):
+          if not p.config & of.OFPPC_PORT_DOWN and p.port_no not in (event.port, self.port_external):
             msg.actions.append(of.ofp_action_output(port=p.port_no))
         msg.buffer_id = event.ofp.buffer_id
         msg.in_port = event.port
